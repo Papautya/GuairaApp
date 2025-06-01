@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -41,6 +43,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.devexpert.android_firebase.model.Contact
 import io.devexpert.android_firebase.model.Note
 import io.devexpert.android_firebase.utils.FirestoreManager
 import kotlinx.coroutines.CoroutineScope
@@ -111,7 +114,7 @@ fun NotesScreen(firestore: FirestoreManager) {
 @Composable
 fun NoteItem(note: Note, firestore: FirestoreManager) {
     var showDeleteNoteDialog by remember { mutableStateOf(false) }
-
+    var showEditNoteDialog by remember { mutableStateOf(false) }
 
     val onDeleteNoteConfirmed: () -> Unit = {
         CoroutineScope(Dispatchers.Default).launch {
@@ -131,6 +134,23 @@ fun NoteItem(note: Note, firestore: FirestoreManager) {
         )
     }
 
+    val coroutineScope = rememberCoroutineScope()
+
+    if (showEditNoteDialog) {
+        EditNoteDialog(
+            note = note,
+            onNoteUpdated = { updatedNote ->
+                coroutineScope.launch {
+                    firestore.updateNote(updatedNote)
+                    showEditNoteDialog = false
+                }
+            },
+            onDialogDismissed = {
+                showEditNoteDialog = false
+            }
+        )
+    }
+
     Card(
         modifier = Modifier.padding(6.dp),
     ) {
@@ -139,18 +159,34 @@ fun NoteItem(note: Note, firestore: FirestoreManager) {
                 .padding(12.dp)
                 .fillMaxWidth()
         ) {
-            Text(text = note.title,
+            Text(
+                text = note.title,
                 fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,)
+                fontSize = 20.sp,
+            )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = note.content,
+            Text(
+                text = note.content,
                 fontWeight = FontWeight.Thin,
                 fontSize = 13.sp,
-                lineHeight = 15.sp)
-            IconButton(
-                onClick = { showDeleteNoteDialog = true },
+                lineHeight = 15.sp
+            )
+
+            // Aquí usamos un Row para poner los botones en una fila
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End // Alinea los íconos a la derecha
             ) {
-                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Icon")
+                IconButton(
+                    onClick = { showDeleteNoteDialog = true }
+                ) {
+                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Icon")
+                }
+                IconButton(
+                    onClick = { showEditNoteDialog = true }
+                ) {
+                    Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Icon")
+                }
             }
         }
     }
@@ -230,6 +266,58 @@ fun DeleteNoteDialog(onConfirmDelete: () -> Unit, onDismiss: () -> Unit) {
                 onClick = onDismiss
             ) {
                 Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+fun EditNoteDialog(
+    note: Note,
+    onNoteUpdated: (Note) -> Unit,
+    onDialogDismissed: () -> Unit
+) {
+    var title by remember { mutableStateOf(note.title) }
+    var content by remember { mutableStateOf(note.content) }
+
+    AlertDialog(
+        onDismissRequest = onDialogDismissed,
+        title = { Text(text = "Editar Contacto") },
+        confirmButton = {
+            Button(onClick = {
+                val updatedContact = note.copy(
+                    title = title,
+                    content = content
+                )
+                onNoteUpdated(updatedContact)
+            }) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDialogDismissed) {
+                Text("Cancelar")
+            }
+        },
+        text = {
+            Column {
+                TextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Text),
+                    label = { Text(text = "Título") }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    value = content,
+                    onValueChange = { content = it },
+                    keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Text),
+                    maxLines = 4,
+                    label = { Text(text = "Contenido") }
+                )
             }
         }
     )

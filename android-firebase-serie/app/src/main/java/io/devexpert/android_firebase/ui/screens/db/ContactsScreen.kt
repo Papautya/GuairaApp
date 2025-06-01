@@ -1,57 +1,42 @@
 package io.devexpert.android_firebase.ui.screens.db
 
+import android.Manifest
 import android.annotation.SuppressLint
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import android.content.Context
+import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import coil.compose.rememberAsyncImagePainter
 import io.devexpert.android_firebase.model.Contact
 import io.devexpert.android_firebase.utils.AuthManager
 import io.devexpert.android_firebase.utils.RealtimeManager
+import java.io.File
+import java.util.*
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun ContactsScreen(realtime: RealtimeManager, authManager: AuthManager) {
     var showAddContactDialog by remember { mutableStateOf(false) }
-
     val contacts by realtime.getContactsFlow().collectAsState(emptyList())
 
     Scaffold(
@@ -76,7 +61,7 @@ fun ContactsScreen(realtime: RealtimeManager, authManager: AuthManager) {
             }
         }
     ) { _  ->
-        if(!contacts.isNullOrEmpty()) {
+        if(contacts.isNotEmpty()) {
             LazyColumn {
                 contacts.forEach { contact ->
                     item {
@@ -104,15 +89,60 @@ fun ContactsScreen(realtime: RealtimeManager, authManager: AuthManager) {
 @Composable
 fun ContactItem(contact: Contact, realtime: RealtimeManager) {
     var showDeleteContactDialog by remember { mutableStateOf(false) }
+    var showEditContactDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    val onDeleteContactConfirmed: () -> Unit = {
-        realtime.deleteContact(contact.key ?: "")
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+
+
+    // Crea un lanzador de actividad para capturar una foto y guardarla en un URI especificado.
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success && photoUri != null) {
+            // Crea una copia del contacto actual, actualizando el campo photoUri con el nuevo URI como string
+            val updated = contact.copy(photoUri = photoUri.toString())
+            // Actualiza el contacto en la base de datos (en este caso, usando Firebase Realtime Database)
+            realtime.updateContact(contact.key ?: "", updated)
+        }
+    }
+
+    fun takePicture(context: Context): Uri {
+        // Crea un nuevo archivo en el directorio de imágenes de la app (en almacenamiento externo),
+        val photoFile = File(
+            context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            "${UUID.randomUUID()}.jpg"
+        )
+
+        // Obtiene un URI seguro para el archivo usando FileProvider,
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.provider", // Autoridad definida en el Manifest y xml de FileProvider
+            photoFile
+        )
+
+        // Guarda el URI en una variable global o de clase llamada photoUri
+        photoUri = uri
+
+        // Retorna el URI del archivo creado, para que pueda ser usado
+        return uri
+    }
+
+    if (showEditContactDialog) {
+        EditContactDialog(
+            contact = contact,
+            onContactUpdated = { updatedContact ->
+                realtime.updateContact(contact.key ?: "", updatedContact)
+                showEditContactDialog = false
+            },
+            onDialogDismissed = {
+                showEditContactDialog = false
+            }
+        )
     }
 
     if (showDeleteContactDialog) {
         DeleteContactDialog(
             onConfirmDelete = {
-                onDeleteContactConfirmed()
+                realtime.deleteContact(contact.key ?: "")
                 showDeleteContactDialog = false
             },
             onDismiss = {
@@ -133,43 +163,41 @@ fun ContactItem(contact: Contact, realtime: RealtimeManager) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(3f)) {
-                Text(
-                    text = contact.name,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = contact.phoneNumber,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = contact.email,
-                    fontWeight = FontWeight.Thin,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
+            Row(modifier = Modifier.weight(3f)) {
+                if (!contact.photoUri.isNullOrEmpty()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(model = contact.photoUri),
+                        contentDescription = "Contact Image",
+                        modifier = Modifier.size(64.dp).padding(end = 8.dp)
+                    )
+                }
+                Column {
+                    Text(text = contact.name, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(text = contact.phoneNumber, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                    Text(text = contact.email, fontWeight = FontWeight.Thin, fontSize = 12.sp)
+                }
             }
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                IconButton(
-                    onClick = {
-                        showDeleteContactDialog = true
-                    },
-                ) {
+            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
+                IconButton(onClick = { showDeleteContactDialog = true }) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Icon")
+                }
+                IconButton(onClick = { showEditContactDialog = true }) {
+                    Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Icon")
+                }
+            }
+            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
+                IconButton(onClick = {
+                    val uri = takePicture(context)
+                    // Actualiza la variable de estado photoUri con ese URI
+                    cameraLauncher.launch(uri)
+                }) {
+                    Icon(imageVector = Icons.Default.Camera, contentDescription = "Camera Icon")
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun AddContactDialog(onContactAdded: (Contact) -> Unit, onDialogDismissed: () -> Unit, authManager: AuthManager) {
@@ -252,6 +280,60 @@ fun DeleteContactDialog(onConfirmDelete: () -> Unit, onDismiss: () -> Unit) {
                 onClick = onDismiss
             ) {
                 Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+fun EditContactDialog(
+    contact: Contact,
+    onContactUpdated: (Contact) -> Unit,
+    onDialogDismissed: () -> Unit
+) {
+    var name by remember { mutableStateOf(contact.name) }
+    var phoneNumber by remember { mutableStateOf(contact.phoneNumber) }
+    var email by remember { mutableStateOf(contact.email) }
+
+    AlertDialog(
+        onDismissRequest = onDialogDismissed,
+        title = { Text(text = "Editar Contacto") },
+        confirmButton = {
+            Button(onClick = {
+                val updatedContact = contact.copy(
+                    name = name,
+                    phoneNumber = phoneNumber,
+                    email = email
+                )
+                onContactUpdated(updatedContact)
+            }) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDialogDismissed) {
+                Text("Cancelar")
+            }
+        },
+        text = {
+            Column {
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nombre") }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = phoneNumber,
+                    onValueChange = { phoneNumber = it },
+                    label = { Text("Teléfono") }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Correo electrónico") }
+                )
             }
         }
     )

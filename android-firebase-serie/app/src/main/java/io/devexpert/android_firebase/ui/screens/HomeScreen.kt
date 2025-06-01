@@ -105,21 +105,29 @@ fun HomeScreen(analytics: AnalyticsManager, auth: AuthManager, navigation: NavCo
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted: Boolean ->
-        hasLocationPermission = granted
-        if (!granted) {
-            Toast.makeText(context,
-                "Sin permiso no puedo obtener tu ubicación",
-                Toast.LENGTH_SHORT
-            ).show()
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val cameraGranted = permissions[Manifest.permission.CAMERA] == true
+
+        hasLocationPermission = locationGranted
+
+        if (!locationGranted) {
+            Toast.makeText(context, "Sin permiso no puedo obtener tu ubicación", Toast.LENGTH_SHORT).show()
+        }
+
+        if (!cameraGranted) {
+            Toast.makeText(context, "Permiso de cámara denegado", Toast.LENGTH_SHORT).show()
         }
     }
 
     LaunchedEffect(Unit) {
-        if (!hasLocationPermission) {
-            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
+        permissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            )
+        )
     }
 
     var coords by remember { mutableStateOf<Coordinates?>(null) }
